@@ -1,0 +1,47 @@
+{
+  "name": "v-check",
+  "version": "1.0.0",
+  "description": "validation for vue",
+  "main": "./dist/v-check.js",
+  "scripts": {
+    "test": "npm run test",
+    "build": "./node_modules/.bin/rimraf dist && NODE_ENV=production && ./node_modules/.bin/webpack --config webpack.config.js --mode=production"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bolin-L/v-check.git"
+  },
+  "keywords": [
+    "vue",
+    "validation",
+    "check",
+    "validator",
+    "valid",
+    "v-check"
+  ],
+  "author": "liaobolin",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bolin-L/v-check/issues"
+  },
+  "homepage": "https://github.com/bolin-L/v-check#readme",
+  "dependencies": {
+    "validator": "^10.4.0"
+  },
+  "devDependencies": {
+    "babel-core": "^6.26.3",
+    "babel-eslint": "^8.2.6",
+    "babel-preset-es2015": "^6.24.1",
+    "chai": "^4.1.2",
+    "eslint": "^3.19.0",
+    "eslint-config-airbnb-base": "^11.3.0",
+    "eslint-import-resolver-webpack": "^0.8.3",
+    "eslint-loader": "^2.1.0",
+    "eslint-plugin-html": "^3.0.0",
+    "eslint-plugin-import": "^2.7.0",
+    "mocha": "^5.2.0",
+    "rimraf": "^2.6.2",
+    "webpack": "^4.16.1",
+    "webpack-cli": "^3.1.0"
+  }
+}
