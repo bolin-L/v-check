@@ -81,12 +81,7 @@ class VCheck {
     }
 
     initCheck(el, binding, vnode) {
-        const checkData = binding.value || {};
-
-        if (typeof checkData !== 'object') {
-            return;
-        }
-
+        const checkData = typeof binding.value === 'string' ? { type: binding.value } : binding.value || {};
         const checkType = checkData.type;
         const rules = checkData.rules || [];
         // attr may be a.b.c or a[b][c] todo
