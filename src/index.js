@@ -1,22 +1,49 @@
+/* eslint-disable */
 import defaultRules from './defaultRules';
 import validator from './validator';
+import utils from '../utils/index';
 
 class VCheck {
     install(Vue, options) {
         this.config = options || {};
         this.defaultRules = Object.assign(defaultRules, this.config.defaultRules);
+        this.Vue = Vue;
 
-        Vue.directive('v-check', {
-            inserted: this.initCheck,
+        Vue.directive('check', {
+            inserted: this.initCheck.bind(this),
         });
     }
 
-    validate(value, rules, checkType, vnode) {
+    initCheck(el, binding, vnode) {
+        const checkData = typeof binding.value === 'string' ? { type: binding.value } : Array.isArray(binding.value) ? {rules: binding.value } : binding.value || {};
+        const checkType = checkData.type;
+        const rules = checkData.rules || [];
+        // attr may be a.b.c or a[b][c] todo
+        const checkAttr = checkData.checkAttr || this.config.defaultCheckAttr || 'value';
+        const eventType = this.addEventPrefix(checkData.event || (checkData.isRealTime ? 'change' : 'blur'));
+        const compIns = this.resolveComponentInstance(el, vnode);
+        let value = compIns[checkAttr] || checkData[checkAttr];
+
+        if (checkData.checkInit) {
+            this.validate(value, rules, checkType, compIns, checkAttr);
+        }
+
+        compIns.$on(eventType, () => {
+            // value may be change
+            value = compIns[checkAttr] || checkData[checkAttr];
+            this.validate(value, rules, checkType, compIns, checkAttr);
+        });
+
+        this.addSelfToContainer(rules, checkType, compIns, checkAttr);
+    }
+
+    validate(value, rules, checkType, compIns, checkAttr) {
         rules = (this.defaultRules[checkType] || []).concat(rules);
 
         let conclusion = {
             success: true,
             message: '',
+            checkAttr,
         };
         let success = true;
         let rule;
@@ -31,11 +58,12 @@ class VCheck {
             if (validator[rule.type]) {
                 success = validator[rule.type].call(null, value, rule);
             } else if (rule.method && typeof rule.method === 'function') {
-                success = rule.method.call(null, value, rule, vnode, validator);
+                success = rule.method.call(null, value, rule, compIns, checkAttr, validator);
             } else {
                 conclusion = {
                     success: false,
                     message: '找不到此规则的校验方法',
+                    checkAttr,
                 };
             }
 
@@ -46,10 +74,10 @@ class VCheck {
             }
         }
 
-        const result = conclusion.success ? 'valid' : 'invalid';
+        const ev = this.addEventPrefix(conclusion.success ? 'valid' : 'invalid');
 
-        if (vnode) {
-            vnode.$emit(result, conclusion);
+        if (compIns) {
+            compIns.$emit(ev, conclusion);
         }
 
         return conclusion;
@@ -64,40 +92,25 @@ class VCheck {
         };
         const errorReuslts = [];
         let comp;
+        let value;
 
         for (let i = 0; i < comps.length; i++) {
             comp = comps[i];
-            result = this.validate(comp.value, comp.rules, comp.checkType, comp.vnode);
+            value = comp.compIns[comp.checkAttr];
+            result = this.validate(value, comp.rules, comp.checkType, comp.compIns, comp.checkAttr);
 
             if (!result.success && this.config.validateAllWhatever) {
-                result.attr = comp.checkAttr;
                 errorReuslts.push(result);
             } else if (!result.success) {
                 break;
             }
         }
 
-        return errorReuslts.length > 0 ? errorReuslts : result;
+        return this.config.validateAllWhatever ? errorReuslts : result;
     }
 
-    initCheck(el, binding, vnode) {
-        const checkData = typeof binding.value === 'string' ? { type: binding.value } : binding.value || {};
-        const checkType = checkData.type;
-        const rules = checkData.rules || [];
-        // attr may be a.b.c or a[b][c] todo
-        const checkAttr = checkData.checkAttr || this.config.defaultCheckAttr || 'value';
-        const value = vnode[checkAttr] || checkData[checkAttr];
-        const eventType = checkData.event || checkData.isRealTime ? 'change' : 'blur';
-
-        vnode.$on(eventType, () => {
-            this.validate(value, rules, checkType, vnode);
-        });
-
-        this.addSelfToContainer(value, rules, checkType, vnode, checkAttr);
-    }
-
-    addSelfToContainer(value, rules, checkType, vnode, checkAttr) {
-        let parent = vnode.$parent;
+    addSelfToContainer(rules, checkType, compIns, checkAttr) {
+        let parent = compIns.$parent;
         let hasGetContainer;
 
         do {
@@ -105,16 +118,16 @@ class VCheck {
                 if (parent.$refs.validationContainer) {
                     parent.$validationControls = parent.$validationControls || [];
                     parent.$validationControls.push({
-                        value,
                         rules,
                         checkType,
-                        vnode,
+                        compIns,
                         checkAttr,
+                        parent,
                     });
 
                     parent.validateAll = this.validateAll.bind(this, parent);
 
-                    parent.$on('destroyed', this.removeComp.bind(this, vnode, parent));
+                    parent.$on('destroyed', this.removeComp.bind(this, compIns, parent));
 
                     hasGetContainer = true;
                     break;
@@ -129,9 +142,67 @@ class VCheck {
         } while (parent);
     }
 
-    removeComp(vnode, parent) {
-        const index = parent.$validationControls.indexOf(vnode);
+    resolveComponentInstance(el, vnode) {
+        let instance = vnode.componentInstance;
+
+        return !utils.isNullOrUndefined(instance) ? instance : this.wrapComponentInstance(el, vnode);
+    }
+
+    wrapComponentInstance(el, vnode) {
+        let inputEvent = utils.isTextInput(el) ? ['focus', 'input', 'change', 'blur'] : ['change', 'select', 'click'];
+
+        el = this.createVm(el, vnode, inputEvent);
+        // inputEvent = Array.isArray(inputEvent) ? inputEvent : [inputEvent];
+
+        for(let i = 0; i < inputEvent.length; i++) {
+            utils.addEventListener(el, inputEvent[i], () => {
+                el.$emit(this.addEventPrefix(inputEvent[i]), {
+                    target: el
+                });
+            });
+        }
+
+        return el;
+    }
+
+    createVm(el, vnode) {
+        const events = (vnode.data || {}).on || {};
+
+        for(let ev in events) {
+            if (events[ev] && !Array.isArray(events[ev])) {
+                events[ev] = [events[ev]];
+            }
+        }
+
+        return Object.assign(el, {
+            $on: this.Vue.prototype.$on,
+            $emit: this.Vue.prototype.$emit,
+            _events: events,
+            $parent: vnode.context
+        });
+    }
+
+    removeComp(compIns, parent) {
+        const index = parent.$validationControls.indexOf(compIns);
         parent.splice(index, 1);
+    }
+
+    addEventPrefix(ev) {
+        if (!this.config.eventPatch) {
+            return ev;
+        }
+
+        let evArr = Array.isArray(ev) ? ev : [ev];
+
+        evArr = evArr.map((e) => {
+            if (this.config.eventPatch.events) {
+                return validator.isIn(e, this.config.eventPatch.events) ? this.config.eventPatch.prefix + e : e;
+            } else {
+                return this.config.eventPatch.prefix + e;
+            }
+        });
+
+        return typeof ev === 'string' ? evArr[0] : evArr;
     }
 }
 

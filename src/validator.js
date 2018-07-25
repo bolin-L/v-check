@@ -1,3 +1,4 @@
+/* eslint-disable */
 import validator from 'validator';
 
 const CHINESE_REG = /^[\u4e00-\u9fa5]{0,}$/;
