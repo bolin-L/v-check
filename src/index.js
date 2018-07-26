@@ -1,7 +1,7 @@
 /* eslint-disable */
 import defaultRules from './defaultRules';
 import validator from './validator';
-import utils from './utils';
+import utils from '../utils/index';
 
 class VCheck {
     /**
@@ -13,8 +13,10 @@ class VCheck {
      * @param  {String  }    options.directiveName          User custom directive eg. validation
      * @param  {String  }    options.defaultCheckAttr       The attribute of component instance to validation. default is value
      * @param  {Function}    options.errorHandle            Global error handle function
+     * @param  {Function}    options.successHandle          Global success handle function
      * @param  {Object  }    options.eventPatch             Add prefix to all|part of event. eg. on-
      * @param  {Object  }    options.checkTypeText          The error text of default validation type
+     * @param  {String  }    options.checkContainerRef      check container component's value of ref
      * @param  {String  }    options.eventPatch.prefix      Event prefix
      * @param  {Array   }    options.eventPatch.events      The event need to add event prefix, add to all when undefined
      * @return {void}
@@ -53,6 +55,7 @@ class VCheck {
             compIns: this.resolveComponentInstance(el, vnode),
             noGlobalHandle: checkData.noGlobalHandle,
             el,
+            checkData,
         };
 
         let value = utils.getValueStepIn(options.checkAttr, options.compIns) || utils.getValueStepIn(options.checkAttr, checkData);
@@ -105,7 +108,7 @@ class VCheck {
         }
 
         for (let i = 0, len = options.rules.length; i < len; i++) {
-            rule = options.rules[i];
+            rule = options.rules[i] || {};
 
             if (validator[rule.type]) {
                 success = validator[rule.type].call(null, value, rule);
@@ -128,6 +131,7 @@ class VCheck {
 
         const ev = this.addEventPrefix(conclusion.success ? 'valid' : 'invalid');
         const errHandle = this.config.errorHandle;
+        const successHandle = this.config.successHandle;
 
         if (options.compIns) {
             options.compIns.$emit(ev, conclusion);
@@ -135,6 +139,10 @@ class VCheck {
 
         if (!conclusion.success && typeof errHandle === 'function' && !options.noGlobalHandle) {
             errHandle.call(this, conclusion, value, options);
+        }
+
+        if (conclusion.success && typeof successHandle === 'function' && !options.noGlobalHandle) {
+            successHandle.call(this, conclusion, value, options);
         }
 
         return conclusion;
@@ -156,7 +164,8 @@ class VCheck {
 
         for (let i = 0; i < comps.length; i++) {
             comp = comps[i];
-            value = comp.compIns[comp.checkAttr];
+
+            value = utils.getValueStepIn(comp.checkAttr, comp.compIns) || utils.getValueStepIn(comp.checkAttr, comp.checkData);
 
             const result = this.check(value, Object.assign(comp, { noGlobalHandle }));
 
@@ -185,7 +194,7 @@ class VCheck {
 
         do {
             while (parent) {
-                if (parent.$refs.checkContainer) {
+                if (parent.$refs[this.config.checkContainerRef || 'checkContainer']) {
                     parent.$checkControls = parent.$checkControls || [];
                     parent.$checkControls.push(Object.assign(options, { parent }));
 

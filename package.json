@@ -1,6 +1,6 @@
 {
   "name": "v-check",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "validation for vue",
   "main": "./dist/v-check.js",
   "scripts": {
