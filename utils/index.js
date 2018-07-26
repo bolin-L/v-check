@@ -28,5 +28,20 @@ export default {
         const type = Object.prototype.toString.call(value);
 
         return type.slice(8, -1).toLowerCase();
+    },
+
+    getValueStepIn(attr, obj) {
+        const dotReg = /[^.\[\]]+/g;
+        const attrSteps = (attr || '').match(dotReg) || [];
+        let tmp = obj;
+        let i = 0;
+
+        while (tmp && i < attrSteps.length) {
+            tmp = tmp[attrSteps[i]];
+            i++;
+        }
+
+        return tmp;
     }
 }
+

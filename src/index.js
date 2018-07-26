@@ -1,9 +1,24 @@
 /* eslint-disable */
 import defaultRules from './defaultRules';
 import validator from './validator';
-import utils from '../utils/index';
+import utils from './utils';
 
 class VCheck {
+    /**
+     * Vue plugin entry method
+     *
+     * @param  {Function}    Vue                            Vue constructor
+     * @param  {Object  }    options                        Global validation config
+     * @param  {Array   }    options.defaultRules           Global validation rules
+     * @param  {String  }    options.directiveName          User custom directive eg. validation
+     * @param  {String  }    options.defaultCheckAttr       The attribute of component instance to validation. default is value
+     * @param  {Function}    options.errorHandle            Global error handle function
+     * @param  {Object  }    options.eventPatch             Add prefix to all|part of event. eg. on-
+     * @param  {Object  }    options.checkTypeText          The error text of default validation type
+     * @param  {String  }    options.eventPatch.prefix      Event prefix
+     * @param  {Array   }    options.eventPatch.events      The event need to add event prefix, add to all when undefined
+     * @return {void}
+     */
     install(Vue, options) {
         this.config = options || {};
         this.defaultRules = Object.assign(defaultRules, this.config.defaultRules);
@@ -11,9 +26,18 @@ class VCheck {
 
         Vue.directive(this.config.directiveName || 'check', {
             inserted: this.initCheck.bind(this),
+            unbind: this.removeComp.bind(this),
         });
     }
 
+    /**
+     * Vue directive inserted hook
+     *
+     * @param  {Object}    el         The element the directive is bound to. This can be used to directly manipulate the DOM.
+     * @param  {Object}    binding    An object containing the properties of expression.
+     * @param  {Object}    vnode      The virtual node produced by Vue’s compiler
+     * @return  {void}
+     */
     initCheck(el, binding, vnode) {
         const checkDataChoice = {
             string: { type: binding.value },
@@ -21,79 +45,110 @@ class VCheck {
             object: binding.value
         };
         const checkData = checkDataChoice[utils.typeof(binding.value)] || {};
-        const checkType = checkData.type;
-        const rules = checkData.rules || [];
-        // attr may be a.b.c or a[b][c] todo
-        const checkAttr = checkData.checkAttr || this.config.defaultCheckAttr || 'value';
-        const eventType = this.addEventPrefix(checkData.event || (checkData.isRealTime ? 'change' : 'blur'));
-        const compIns = this.resolveComponentInstance(el, vnode);
-        let value = compIns[checkAttr] || checkData[checkAttr];
+        const options = {
+            checkType: checkData.type,
+            rules: checkData.rules || [],
+            checkAttr: checkData.checkAttr || this.config.defaultCheckAttr || 'value',
+            eventType: this.addEventPrefix(checkData.event || (checkData.isRealTime ? 'change' : 'blur')),
+            compIns: this.resolveComponentInstance(el, vnode),
+            noGlobalHandle: checkData.noGlobalHandle,
+            el,
+        };
+
+        let value = utils.getValueStepIn(options.checkAttr, options.compIns) || utils.getValueStepIn(options.checkAttr, checkData);
 
         if (checkData.checkInit) {
-            this.validate(value, rules, checkType, compIns, checkAttr);
+            this.check(value, options);
         }
 
-        compIns.$on(eventType, () => {
+        options.compIns.$on(options.eventType, () => {
             // value may be change
-            value = compIns[checkAttr] || checkData[checkAttr];
-            this.check(value, rules, checkType, compIns, checkAttr);
+            value = utils.getValueStepIn(options.checkAttr, options.compIns) || utils.getValueStepIn(options.checkAttr, checkData);
+            this.check(value, options);
         });
 
-        this.addSelfToContainer(rules, checkType, compIns, checkAttr);
+        this.addSelfToContainer(options);
     }
 
-    check(value, rules, checkType, compIns, checkAttr) {
-        rules = (this.defaultRules[checkType] || []).concat(rules);
+    /**
+     * Check value use rules and default rules of checkType
+     *
+     * @param  {String  }    value                      The value of need to validate
+     * @param  {Object  }    options                    Check config
+     * @param  {Array   }    options.rules              The rules of check component's value
+     * @param  {String  }    options.checkType          The type of the value must to be
+     * @param  {Object  }    options.compIns            Component instance
+     * @param  {String  }    options.checkAttr          A key of component instance
+     * @param  {Boolean }    options.noGlobalHandle     Do not use globalHandle method when validation fail
+     * @return {Object}
+     */
+    check(value, options) {
+        options.rules = (this.defaultRules[options.checkType] || []).concat(options.rules);
+
+        if (validator[options.checkType]) {
+            options.rules.unshift({
+                type: options.checkType,
+                message: ((this.config.checkTypeText || {})[options.checkType] || {}).text || `value must match ${options.checkType}`,
+            });
+        }
 
         let conclusion = {
             success: true,
             message: '',
-            checkAttr,
+            checkAttr: options.checkAttr,
         };
         let success = true;
         let rule;
 
-        if (rules.length === 0) {
+        if (options.rules.length === 0) {
             return conclusion;
         }
 
-        for (let i = 0, len = rules.length; i < len; i++) {
-            rule = rules[i];
+        for (let i = 0, len = options.rules.length; i < len; i++) {
+            rule = options.rules[i];
 
             if (validator[rule.type]) {
                 success = validator[rule.type].call(null, value, rule);
             } else if (rule.method && typeof rule.method === 'function') {
-                success = rule.method.call(null, value, rule, compIns, checkAttr, validator);
+                success = rule.method.call(null, value, rule, options);
             } else {
                 conclusion = {
                     success: false,
                     message: '找不到此规则的校验方法',
-                    checkAttr,
+                    checkAttr: options.checkAttr,
                 };
             }
 
             if (!success || !conclusion.success) {
                 conclusion.message = rule.message || conclusion.message;
                 conclusion.success = false;
-                break; // 有错误则跳出
+                break;
             }
         }
 
         const ev = this.addEventPrefix(conclusion.success ? 'valid' : 'invalid');
         const errHandle = this.config.errorHandle;
 
-        if (compIns) {
-            compIns.$emit(ev, conclusion);
+        if (options.compIns) {
+            options.compIns.$emit(ev, conclusion);
         }
 
-        if (typeof errHandle === 'function') {
-            errHandle.call(this, value, rules, checkType, compIns, checkAttr);
+        if (!conclusion.success && typeof errHandle === 'function' && !options.noGlobalHandle) {
+            errHandle.call(this, conclusion, value, options);
         }
 
         return conclusion;
     }
 
-    checkAll(container, returnWhenError) {
+    /**
+     * Check all component instance which has directive v-check
+     *
+     * @param  {Object  }    container          The check box which has ref=checkContainer attribute
+     * @param  {Boolean }    returnWhenError    Return errors once check fail
+     * @param  {Boolean }    noGlobalHandle     Do not use globalHandle method when check fail
+     * @return {Array}
+     */
+    checkAll(container, returnWhenError, noGlobalHandle) {
         const comps = container.$checkControls || [];
         let errors = [];
         let comp;
@@ -103,7 +158,7 @@ class VCheck {
             comp = comps[i];
             value = comp.compIns[comp.checkAttr];
 
-            const result = this.validate(value, comp.rules, comp.checkType, comp.compIns, comp.checkAttr);
+            const result = this.check(value, Object.assign(comp, { noGlobalHandle }));
 
             errors.push(result);
 
@@ -112,28 +167,34 @@ class VCheck {
             }
         }
 
-        return result;
+        return errors;
     }
 
-    addSelfToContainer(rules, checkType, compIns, checkAttr) {
-        let parent = compIns.$parent;
+    /**
+     * Add component instance to check box component instance which has ref=checkContainer attribute
+     *
+     * @param  {Array   }    options.rules         Check rules
+     * @param  {String  }    options.checkType     The type of the value must to be
+     * @param  {Object  }    options.compIns       Component instance
+     * @param  {String  }    options.checkAttr     A key of component instance
+     * @return {void}
+     */
+    addSelfToContainer(options) {
+        let parent = options.compIns.$parent;
         let hasGetContainer;
 
         do {
             while (parent) {
                 if (parent.$refs.checkContainer) {
                     parent.$checkControls = parent.$checkControls || [];
-                    parent.$checkControls.push({
-                        rules,
-                        checkType,
-                        compIns,
-                        checkAttr,
-                        parent,
-                    });
+                    parent.$checkControls.push(Object.assign(options, { parent }));
 
                     parent.checkAll = this.checkAll.bind(this, parent);
+                    options.compIns.parent = parent; // for remove
 
-                    parent.$on('destroyed', this.removeComp.bind(this, compIns, parent));
+                    parent.$on('destroyed', () => {
+                        parent.$checkControls = null;
+                    });
 
                     hasGetContainer = true;
                     break;
@@ -148,17 +209,31 @@ class VCheck {
         } while (parent);
     }
 
+    /**
+     * Get component instance from vnode when in directive hook
+     *
+     * @param  {Object  }    el         The element the directive is bound to. This can be used to directly manipulate the DOM.
+     * @param  {Object  }    vnode      The virtual node produced by Vue’s compiler
+     * @return {Object}
+     */
     resolveComponentInstance(el, vnode) {
         let instance = vnode.componentInstance;
 
         return !utils.isNullOrUndefined(instance) ? instance : this.wrapComponentInstance(el, vnode);
     }
 
+    /**
+     * wrap el when directive was bind to custom tag and add listeners
+     *
+     * @param  {Object  }    el         The element the directive is bound to. This can be used to directly manipulate the DOM.
+     * @param  {Object  }    vnode      The virtual node produced by Vue’s compiler
+     * @return {Object}
+     */
     wrapComponentInstance(el, vnode) {
+        // for custom input or others htmlElement, add listeners
         let inputEvent = utils.isTextInput(el) ? ['focus', 'input', 'change', 'blur'] : ['change', 'select', 'click'];
 
         el = this.createVm(el, vnode, inputEvent);
-        // inputEvent = Array.isArray(inputEvent) ? inputEvent : [inputEvent];
 
         for(let i = 0; i < inputEvent.length; i++) {
             utils.addEventListener(el, inputEvent[i], () => {
@@ -171,6 +246,13 @@ class VCheck {
         return el;
     }
 
+    /**
+     * wrap el when directive was bind to custom tag and add listeners
+     *
+     * @param  {Object  }    el         The element the directive is bound to. This can be used to directly manipulate the DOM.
+     * @param  {Object  }    vnode      The virtual node produced by Vue’s compiler
+     * @return {Object}
+     */
     createVm(el, vnode) {
         const events = (vnode.data || {}).on || {};
 
@@ -188,11 +270,28 @@ class VCheck {
         });
     }
 
-    removeComp(compIns, parent) {
-        const index = parent.$checkControls.indexOf(compIns);
-        parent.splice(index, 1);
+    /**
+     * remove component instance when unbind directive from check container
+     *
+     * @param  {Object  }    el         The element the directive is bound to. This can be used to directly manipulate the DOM.
+     * @param  {Object  }    binding    An object containing the properties of expression.
+     * @param  {Object  }    vnode      The virtual node produced by Vue’s compiler
+     * @return {Object  }
+     */
+    removeComp(el, binding, vnode) {
+        const compIns = this.resolveComponentInstance(el, vnode);
+        const controls = (compIns.parent || {}).$checkControls || [];
+        const index = controls.indexOf(compIns);
+
+        controls.splice(index, 1);
     }
 
+    /**
+     * Add prefix to event
+     *
+     * @param  {String|Array  }   ev    The event need to add prefix
+     * @return {String|Array  }
+     */
     addEventPrefix(ev) {
         if (!this.config.eventPatch) {
             return ev;

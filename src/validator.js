@@ -4,12 +4,12 @@ import validator from 'validator';
 const CHINESE_REG = /^[\u4e00-\u9fa5]{0,}$/;
 const QQ_REG = /[1-9][0-9]{4,}/;
 const ID_CARD_REG = /^\d{15}$|\d{17}[Xx]$|\d{18}$/;
-const BASE_PASSWORD_REG = /^[a-zA-Z]\w{5,17}$/; // 密码(以字母开头，长度在6~18之间，只能包含字母、数字和下划线)
-const SAFE_PASSWORD_REG = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,16}$/; // 必须包含大小写字母和数字的组合，不能使用特殊字符，长度在8-16之间
+const BASE_PASSWORD_REG = /^[a-zA-Z]\w{5,17}$/; // Password (start with character, the length between 6 and 18, just contain character、number、underline)
+const SAFE_PASSWORD_REG = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,16}$/; // Complex password (must be compose of character、number、UpperCase, can not container special character, the length between 8 and 18
 
 export default Object.assign({}, validator, {
     is(value, rule) {
-        return rule.reg.test(value); // 个性化的正则表达式校验
+        return rule.reg.test(value);
     },
     isChinese(value) {
         return CHINESE_REG.test(value);
@@ -27,10 +27,10 @@ export default Object.assign({}, validator, {
         return SAFE_PASSWORD_REG.test(value);
     },
     contains(value, rule) {
-        return validator.contains(value, rule.seed);
+        return validator.contains(value, rule.seed || '');
     },
     equals(value, rule) {
-        return validator.equals(value, rule.comparison);
+        return validator.equals(value, rule.comparison || '');
     },
     isAfter(value, rule) {
         return validator.isAfter(value, rule.now);
@@ -54,7 +54,7 @@ export default Object.assign({}, validator, {
         return validator.isDecimal(value, rule.options);
     },
     isDivisibleBy(value, rule) {
-        return validator.isDivisibleBy(value, rule.number);
+        return validator.isDivisibleBy(value, rule.number || 1);
     },
     isEmail(value, rule) {
         return validator.isEmail(value, rule.options);
@@ -66,7 +66,7 @@ export default Object.assign({}, validator, {
         return validator.isFloat(value, rule.options);
     },
     isHash(value, rule) {
-        return validator.isHash(value, rule.algorithm);
+        return validator.isHash(value, rule.algorithm || 'md5');
     },
     isIP(value, rule) {
         return validator.isIP(value, rule.version);
@@ -78,7 +78,7 @@ export default Object.assign({}, validator, {
         return validator.isISSN(value, rule.options);
     },
     isIn(value, rule) {
-        return validator.isIn(value, rule.values);
+        return validator.isIn(value, rule.values || []);
     },
     isInt(value, rule) {
         return validator.isInt(value, rule.options);
@@ -87,10 +87,10 @@ export default Object.assign({}, validator, {
         return validator.isLength(value, rule.options);
     },
     isMobilePhone(value, rule) {
-        return validator.isMobilePhone(value, rule.locale, rule.options);
+        return validator.isMobilePhone(value, rule.locale || 'zh-CN', rule.options);
     },
     isPostalCode(value, rule) {
-        return validator.isPostalCode(value, rule.locale);
+        return validator.isPostalCode(value, rule.locale || 'zh-CN');
     },
     isURL(value, rule) {
         return validator.isURL(value, rule.options);
@@ -102,6 +102,6 @@ export default Object.assign({}, validator, {
         return validator.isWhitelisted(value, rule.chars);
     },
     matches(value, rule) {
-        return validator.matches(value, rule.pattern || rule.reg, rule.modifiers);
+        return validator.matches(value, rule.pattern || rule.reg || '', rule.modifiers);
     },
 });
