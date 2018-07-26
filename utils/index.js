@@ -22,5 +22,11 @@ export default {
 
     isCheckboxOrRadioInput(el) {
         return validator.isIn(el.type, ['radio', 'checkbox']);
+    },
+
+    typeof(value) {
+        const type = Object.prototype.toString.call(value);
+
+        return type.slice(8, -1).toLowerCase();
     }
 }

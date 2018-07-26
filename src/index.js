@@ -9,13 +9,18 @@ class VCheck {
         this.defaultRules = Object.assign(defaultRules, this.config.defaultRules);
         this.Vue = Vue;
 
-        Vue.directive('check', {
+        Vue.directive(this.config.directiveName || 'check', {
             inserted: this.initCheck.bind(this),
         });
     }
 
     initCheck(el, binding, vnode) {
-        const checkData = typeof binding.value === 'string' ? { type: binding.value } : Array.isArray(binding.value) ? {rules: binding.value } : binding.value || {};
+        const checkDataChoice = {
+            string: { type: binding.value },
+            array: {rules: binding.value },
+            object: binding.value
+        };
+        const checkData = checkDataChoice[utils.typeof(binding.value)] || {};
         const checkType = checkData.type;
         const rules = checkData.rules || [];
         // attr may be a.b.c or a[b][c] todo
@@ -31,13 +36,13 @@ class VCheck {
         compIns.$on(eventType, () => {
             // value may be change
             value = compIns[checkAttr] || checkData[checkAttr];
-            this.validate(value, rules, checkType, compIns, checkAttr);
+            this.check(value, rules, checkType, compIns, checkAttr);
         });
 
         this.addSelfToContainer(rules, checkType, compIns, checkAttr);
     }
 
-    validate(value, rules, checkType, compIns, checkAttr) {
+    check(value, rules, checkType, compIns, checkAttr) {
         rules = (this.defaultRules[checkType] || []).concat(rules);
 
         let conclusion = {
@@ -75,38 +80,39 @@ class VCheck {
         }
 
         const ev = this.addEventPrefix(conclusion.success ? 'valid' : 'invalid');
+        const errHandle = this.config.errorHandle;
 
         if (compIns) {
             compIns.$emit(ev, conclusion);
         }
 
+        if (typeof errHandle === 'function') {
+            errHandle.call(this, value, rules, checkType, compIns, checkAttr);
+        }
+
         return conclusion;
     }
 
-    validateAll(container) {
-        const comps = container.$validationControls || [];
-        let result = {
-            success: true,
-            message: '',
-            attr: '',
-        };
-        const errorReuslts = [];
+    checkAll(container, returnWhenError) {
+        const comps = container.$checkControls || [];
+        let errors = [];
         let comp;
         let value;
 
         for (let i = 0; i < comps.length; i++) {
             comp = comps[i];
             value = comp.compIns[comp.checkAttr];
-            result = this.validate(value, comp.rules, comp.checkType, comp.compIns, comp.checkAttr);
 
-            if (!result.success && this.config.validateAllWhatever) {
-                errorReuslts.push(result);
-            } else if (!result.success) {
+            const result = this.validate(value, comp.rules, comp.checkType, comp.compIns, comp.checkAttr);
+
+            errors.push(result);
+
+            if (!result.success && returnWhenError) {
                 break;
             }
         }
 
-        return this.config.validateAllWhatever ? errorReuslts : result;
+        return result;
     }
 
     addSelfToContainer(rules, checkType, compIns, checkAttr) {
@@ -115,9 +121,9 @@ class VCheck {
 
         do {
             while (parent) {
-                if (parent.$refs.validationContainer) {
-                    parent.$validationControls = parent.$validationControls || [];
-                    parent.$validationControls.push({
+                if (parent.$refs.checkContainer) {
+                    parent.$checkControls = parent.$checkControls || [];
+                    parent.$checkControls.push({
                         rules,
                         checkType,
                         compIns,
@@ -125,7 +131,7 @@ class VCheck {
                         parent,
                     });
 
-                    parent.validateAll = this.validateAll.bind(this, parent);
+                    parent.checkAll = this.checkAll.bind(this, parent);
 
                     parent.$on('destroyed', this.removeComp.bind(this, compIns, parent));
 
@@ -183,7 +189,7 @@ class VCheck {
     }
 
     removeComp(compIns, parent) {
-        const index = parent.$validationControls.indexOf(compIns);
+        const index = parent.$checkControls.indexOf(compIns);
         parent.splice(index, 1);
     }
 
