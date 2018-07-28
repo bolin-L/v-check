@@ -1,4 +1,3 @@
-/* eslint-disable */
 import defaultRules from './defaultRules';
 import validator from './validator';
 import utils from '../utils/index';
@@ -43,8 +42,8 @@ class VCheck {
     initCheck(el, binding, vnode) {
         const checkDataChoice = {
             string: { type: binding.value },
-            array: {rules: binding.value },
-            object: binding.value
+            array: { rules: binding.value },
+            object: binding.value,
         };
         const checkData = checkDataChoice[utils.typeof(binding.value)] || {};
         const options = {
@@ -158,7 +157,7 @@ class VCheck {
      */
     checkAll(container, returnWhenError, noGlobalHandle) {
         const comps = container.$checkControls || [];
-        let errors = [];
+        const errors = [];
         let comp;
         let value;
 
@@ -201,9 +200,7 @@ class VCheck {
                     parent.checkAll = this.checkAll.bind(this, parent);
                     options.compIns.parent = parent; // for remove
 
-                    parent.$on('destroyed', () => {
-                        parent.$checkControls = null;
-                    });
+                    parent.$on('destroyed', this.cleanControls.bind(this, parent));
 
                     hasGetContainer = true;
                     break;
@@ -219,6 +216,14 @@ class VCheck {
     }
 
     /**
+     * clean parent controls
+     *
+     */
+    cleanControls(parent) {
+        parent.$checkControls = null;
+    }
+
+    /**
      * Get component instance from vnode when in directive hook
      *
      * @param  {Object  }    el         The element the directive is bound to. This can be used to directly manipulate the DOM.
@@ -226,7 +231,7 @@ class VCheck {
      * @return {Object}
      */
     resolveComponentInstance(el, vnode) {
-        let instance = vnode.componentInstance;
+        const instance = vnode.componentInstance;
 
         return !utils.isNullOrUndefined(instance) ? instance : this.wrapComponentInstance(el, vnode);
     }
@@ -240,14 +245,14 @@ class VCheck {
      */
     wrapComponentInstance(el, vnode) {
         // for custom input or others htmlElement, add listeners
-        let inputEvent = utils.isTextInput(el) ? ['focus', 'input', 'change', 'blur'] : ['change', 'select', 'click'];
+        const inputEvent = utils.isTextInput(el) ? ['focus', 'input', 'change', 'blur'] : ['change', 'select', 'click'];
 
         el = this.createVm(el, vnode, inputEvent);
 
-        for(let i = 0; i < inputEvent.length; i++) {
+        for (let i = 0; i < inputEvent.length; i++) {
             utils.addEventListener(el, inputEvent[i], () => {
                 el.$emit(this.addEventPrefix(inputEvent[i]), {
-                    target: el
+                    target: el,
                 });
             });
         }
@@ -265,7 +270,7 @@ class VCheck {
     createVm(el, vnode) {
         const events = (vnode.data || {}).on || {};
 
-        for(let ev in events) {
+        for (const ev in events) {
             if (events[ev] && !Array.isArray(events[ev])) {
                 events[ev] = [events[ev]];
             }
@@ -275,7 +280,7 @@ class VCheck {
             $on: this.Vue.prototype.$on,
             $emit: this.Vue.prototype.$emit,
             _events: events,
-            $parent: vnode.context
+            $parent: vnode.context,
         });
     }
 
@@ -308,12 +313,12 @@ class VCheck {
 
         let evArr = Array.isArray(ev) ? ev : [ev];
 
-        evArr = evArr.map((e) => {
+        evArr = evArr.map(e => {
             if (this.config.eventPatch.events) {
                 return validator.isIn(e, this.config.eventPatch.events) ? this.config.eventPatch.prefix + e : e;
-            } else {
-                return this.config.eventPatch.prefix + e;
             }
+
+            return this.config.eventPatch.prefix + e;
         });
 
         return typeof ev === 'string' ? evArr[0] : evArr;
