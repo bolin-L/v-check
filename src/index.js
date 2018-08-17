@@ -85,7 +85,7 @@ class VCheck {
      * @return {Object}
      */
     check(value, options) {
-        options.rules = (this.defaultRules[options.checkType] || []).concat(options.rules);
+        options.rules = (this.defaultRules[options.checkType] || []).concat(options.rules || []);
 
         if (validator[options.checkType]) {
             options.rules.unshift({
@@ -122,7 +122,7 @@ class VCheck {
             }
 
             if (!success || !conclusion.success) {
-                conclusion.message = rule.message || conclusion.message;
+                conclusion.message = conclusion.message || rule.message;
                 conclusion.success = false;
                 break;
             }
