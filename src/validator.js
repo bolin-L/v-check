@@ -10,19 +10,19 @@ const BASE_PASSWORD_REG = /^[a-zA-Z]\w{5,17}$/;
 const SAFE_PASSWORD_REG = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,16}$/;
 
 export default Object.assign({}, validator, {
-    is(value, rule) {
+    is(value, rule = { reg: '' }) {
         return rule.reg.test(value);
     },
-    isRequired(value = '') {
-        return value.length > 0;
+    isRequired(value) {
+        return (value || '').length > 0;
     },
-    isFilled(value = '', rule) {
-        return validator.trim(value, rule.chars).length > 0;
+    isFilled(value, rule = { chars: '' }) {
+        return validator.trim(value || '', rule.chars).length > 0;
     },
     isChinese(value) {
         return CHINESE_REG.test(value);
     },
-    isCnLength(value = '', rule) {
+    isCnLength(value, rule = { options: {} }) {
         // chinese word length is 2
         const cns = (value || '').match(CHINESE_COUNT_REG);
 
@@ -40,82 +40,82 @@ export default Object.assign({}, validator, {
     isSafePassword(value) {
         return SAFE_PASSWORD_REG.test(value);
     },
-    contains(value, rule) {
+    contains(value, rule = {}) {
         return validator.contains(value, rule.seed || '');
     },
-    equals(value, rule) {
+    equals(value, rule = {}) {
         return validator.equals(value, rule.comparison || '');
     },
-    isAfter(value, rule) {
+    isAfter(value, rule = {}) {
         return validator.isAfter(value, rule.now);
     },
-    isBefore(value, rule) {
+    isBefore(value, rule = {}) {
         return validator.isBefore(value, rule.now);
     },
-    isAlpha(value, rule) {
+    isAlpha(value, rule = {}) {
         return validator.isAlpha(value, rule.locale);
     },
-    isAlphanumeric(value, rule) {
+    isAlphanumeric(value, rule = {}) {
         return validator.isAlphanumeric(value, rule.locale);
     },
-    isByteLength(value, rule) {
-        return validator.isByteLength(value, rule.options);
+    isByteLength(value, rule = { options: {} }) {
+        return validator.isByteLength(value || '', rule.options);
     },
-    isCurrency(value, rule) {
+    isCurrency(value, rule = { options: {} }) {
         return validator.isCurrency(value, rule.options);
     },
-    isDecimal(value, rule) {
+    isDecimal(value, rule = { options: {} }) {
         return validator.isDecimal(value, rule.options);
     },
-    isDivisibleBy(value, rule) {
+    isDivisibleBy(value, rule = {}) {
         return validator.isDivisibleBy(value, rule.number || 1);
     },
-    isEmail(value, rule) {
+    isEmail(value, rule = { options: {} }) {
         return validator.isEmail(value, rule.options);
     },
-    isFQDN(value, rule) {
+    isFQDN(value, rule = { options: {} }) {
         return validator.isFQDN(value, rule.options);
     },
-    isFloat(value, rule) {
+    isFloat(value, rule = { options: {} }) {
         return validator.isFloat(value, rule.options);
     },
-    isHash(value, rule) {
+    isHash(value, rule = {}) {
         return validator.isHash(value, rule.algorithm || 'md5');
     },
-    isIP(value, rule) {
-        return validator.isIP(value, rule.version);
+    isIP(value, rule = {}) {
+        return validator.isIP(value || '', rule.version);
     },
-    isISBN(value, rule) {
+    isISBN(value, rule = {}) {
         return validator.isISBN(value, rule.version);
     },
-    isISSN(value, rule) {
+    isISSN(value, rule = { options: {} }) {
         return validator.isISSN(value, rule.options);
     },
-    isIn(value, rule) {
+    isIn(value, rule = {}) {
         return validator.isIn(value, rule.values || []);
     },
-    isInt(value, rule) {
+    isInt(value, rule = { options: {} }) {
         return validator.isInt(value, rule.options);
     },
-    isLength(value, rule) {
-        return validator.isLength(value, rule.options);
+    isLength(value, rule = { options: {} }) {
+        return validator.isLength(value || '', rule.options);
     },
-    isMobilePhone(value, rule) {
+    isMobilePhone(value, rule = { options: {} }) {
         return validator.isMobilePhone(value, rule.locale || 'zh-CN', rule.options);
     },
-    isPostalCode(value, rule) {
+    isPostalCode(value, rule = {}) {
         return validator.isPostalCode(value, rule.locale || 'zh-CN');
     },
-    isURL(value, rule) {
-        return validator.isURL(value, rule.options);
+    isURL(value, rule = { options: {} }) {
+        return validator.isURL(value || '', rule.options);
     },
-    isUUID(value, rule) {
+    isUUID(value, rule = {}) {
         return validator.isUUID(value, rule.version);
     },
-    isWhitelisted(value, rule) {
+    isWhitelisted(value, rule = {}) {
         return validator.isWhitelisted(value, rule.chars);
     },
-    matches(value, rule) {
+    matches(value, rule = {}) {
         return validator.matches(value, rule.pattern || rule.reg || '', rule.modifiers);
     },
 });

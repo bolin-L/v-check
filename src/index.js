@@ -14,6 +14,7 @@ class VCheck {
      * @param  {Function}    options.errorHandle            Global error handle function
      * @param  {Function}    options.successHandle          Global success handle function
      * @param  {Object  }    options.eventPatch             Add prefix to all|part of event. eg. on-
+     * @param  {Array|String}options.triggerEvent           set default event that component trigger
      * @param  {Object  }    options.checkTypeText          The error text of default validation type
      * @param  {String  }    options.checkContainerRef      check container component's value of ref
      * @param  {String  }    options.eventPatch.prefix      Event prefix
@@ -39,7 +40,7 @@ class VCheck {
      * @param  {Object}    vnode      The virtual node produced by Vue’s compiler
      * @return  {void}
      */
-    initCheck(el, binding, vnode) {
+    async initCheck(el, binding, vnode) {
         const checkDataChoice = {
             string: { type: binding.value },
             array: { rules: binding.value },
@@ -50,23 +51,26 @@ class VCheck {
             checkType: checkData.type,
             rules: checkData.rules || [],
             checkAttr: checkData.checkAttr || this.config.defaultCheckAttr || 'value',
-            eventType: this.addEventPrefix(checkData.event || (checkData.isRealTime ? 'change' : 'blur')),
+            eventType: this.addEventPrefix(checkData.trigger || this.config.triggerEvent || (checkData.isRealTime ? 'change' : 'blur')),
             compIns: this.resolveComponentInstance(el, vnode),
-            noGlobalHandle: checkData.noGlobalHandle,
+            noGlobalHandler: checkData.noGlobalHandler,
             el,
             checkData,
+            validator,
         };
 
         let value = utils.getValueStepIn(options.checkAttr, options.compIns) || utils.getValueStepIn(options.checkAttr, checkData);
 
         if (checkData.checkInit) {
-            this.check(value, options);
+            await this.check(value, options);
         }
 
-        options.compIns.$on(options.eventType, () => {
+        options.compIns.$on(options.eventType, async () => {
             // value may be change
-            value = utils.getValueStepIn(options.checkAttr, options.compIns) || utils.getValueStepIn(options.checkAttr, checkData);
-            this.check(value, options);
+            options.compIns.$nextTick(async () => {
+                value = utils.getValueStepIn(options.checkAttr, options.compIns) || utils.getValueStepIn(options.checkAttr, checkData);
+                await this.check(value, options);
+            });
         });
 
         this.addSelfToContainer(options);
@@ -81,10 +85,10 @@ class VCheck {
      * @param  {String  }    options.checkType          The type of the value must to be
      * @param  {Object  }    options.compIns            Component instance
      * @param  {String  }    options.checkAttr          A key of component instance
-     * @param  {Boolean }    options.noGlobalHandle     Do not use globalHandle method when validation fail
+     * @param  {Boolean }    options.noGlobalHandler     Do not use globalHandler method when validation fail
      * @return {Object}
      */
-    check(value, options) {
+    async check(value, options) {
         options.rules = (this.defaultRules[options.checkType] || []).concat(options.rules || []);
 
         if (validator[options.checkType]) {
@@ -112,7 +116,15 @@ class VCheck {
             if (validator[rule.type]) {
                 success = validator[rule.type].call(null, value, rule);
             } else if (rule.method && typeof rule.method === 'function') {
-                success = rule.method.call(null, value, rule, options);
+                conclusion = await rule.method.call(null, value, rule, options);
+
+                if (typeof conclusion === 'boolean') {
+                    conclusion = {
+                        success: conclusion,
+                        message: rule.message,
+                        checkAttr: options.checkAttr,
+                    };
+                }
             } else {
                 conclusion = {
                     success: false,
@@ -128,23 +140,40 @@ class VCheck {
             }
         }
 
+        this.resultHandler(conclusion, value, options);
+
+        return conclusion;
+    }
+
+    /**
+     * Check result handler
+     *
+     * @param  {Object  }    conclusion                 check result
+     * @param  {String  }    value                      The value of need to validate
+     * @param  {Object  }    options                    Check config
+     * @param  {Array   }    options.rules              The rules of check component's value
+     * @param  {String  }    options.checkType          The type of the value must to be
+     * @param  {Object  }    options.compIns            Component instance
+     * @param  {String  }    options.checkAttr          A key of component instance
+     * @param  {Boolean }    options.noGlobalHandler     Do not use globalHandler method when validation fail
+     * @return {void}
+     */
+    resultHandler(conclusion, value, options) {
         const ev = this.addEventPrefix(conclusion.success ? 'valid' : 'invalid');
-        const errHandle = this.config.errorHandle;
-        const successHandle = this.config.successHandle;
+        const errHandler = this.config.errorHandler;
+        const successHandler = this.config.successHandler;
 
         if (options.compIns) {
             options.compIns.$emit(ev, conclusion);
         }
 
-        if (!conclusion.success && typeof errHandle === 'function' && !options.noGlobalHandle) {
-            errHandle.call(this, conclusion, value, options);
+        if (!conclusion.success && typeof errHandler === 'function' && !options.noGlobalHandler) {
+            errHandler.call(this, conclusion, value, options);
         }
 
-        if (conclusion.success && typeof successHandle === 'function' && !options.noGlobalHandle) {
-            successHandle.call(this, conclusion, value, options);
+        if (conclusion.success && typeof successHandler === 'function' && !options.noGlobalHandler) {
+            successHandler.call(this, conclusion, value, options);
         }
-
-        return conclusion;
     }
 
     /**
@@ -152,10 +181,10 @@ class VCheck {
      *
      * @param  {Object  }    container          The check box which has ref=checkContainer attribute
      * @param  {Boolean }    returnWhenError    Return errors once check fail
-     * @param  {Boolean }    noGlobalHandle     Do not use globalHandle method when check fail
+     * @param  {Boolean }    noGlobalHandler     Do not use globalHandle method when check fail
      * @return {Array}
      */
-    checkAll(container, returnWhenError, noGlobalHandle) {
+    async checkAll(container, returnWhenError, noGlobalHandler) {
         const comps = container.$checkControls || [];
         const errors = [];
         let comp;
@@ -166,16 +195,18 @@ class VCheck {
 
             value = utils.getValueStepIn(comp.checkAttr, comp.compIns) || utils.getValueStepIn(comp.checkAttr, comp.checkData);
 
-            const result = this.check(value, Object.assign(comp, { noGlobalHandle }));
+            const result = await this.check(value, Object.assign(comp, { noGlobalHandler }));
 
-            errors.push(result);
+            if (!result.success) {
+                errors.push(result);
+            }
 
             if (!result.success && returnWhenError) {
                 break;
             }
         }
 
-        return errors;
+        return errors.length > 0 ? Promise.reject(errors) : Promise.resolve(true);
     }
 
     /**
@@ -197,8 +228,9 @@ class VCheck {
                     parent.$checkControls = parent.$checkControls || [];
                     parent.$checkControls.push(Object.assign(options, { parent }));
 
-                    parent.checkAll = this.checkAll.bind(this, parent);
-                    options.compIns.parent = parent; // for remove
+                    parent.$checkAll = this.checkAll.bind(this, parent);
+                    parent.$feedbackErrors = this.feedbackErrors.bind(this);
+                    options.compIns.$checkParent = parent; // for remove
 
                     parent.$on('destroyed', this.cleanControls.bind(this, parent));
 
@@ -213,6 +245,10 @@ class VCheck {
                 break;
             }
         } while (parent);
+    }
+
+    feedbackErrors(error, options, value) {
+        this.resultHandler(error, value, options);
     }
 
     /**
@@ -294,7 +330,7 @@ class VCheck {
      */
     removeComp(el, binding, vnode) {
         const compIns = this.resolveComponentInstance(el, vnode);
-        const controls = (compIns.parent || {}).$checkControls || [];
+        const controls = (compIns.$checkParent || {}).$checkControls || [];
         const index = controls.indexOf(compIns);
 
         controls.splice(index, 1);
